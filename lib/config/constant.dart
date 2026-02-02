@@ -1,0 +1,1 @@
+const tenant_id = "clinic_1767629004974";
