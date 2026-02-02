@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:promotional_app/screens/gate_screen.dart';
+import 'package:promotional_app/screens/splash_screen.dart';
 import 'config/theme.dart';
 
 void main() async {
@@ -56,7 +57,7 @@ class UltraPremiumApp extends StatelessWidget {
           bodyLarge: GoogleFonts.lato(fontSize: 16, color: AppColors.textMain),
         ),
       ),
-      home: const ZeroReadGate(),
+      home: const SplashScreen(),
     );
   }
 }
