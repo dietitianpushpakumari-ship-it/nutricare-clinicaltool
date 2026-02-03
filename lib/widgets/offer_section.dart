@@ -2,7 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:url_launcher/url_launcher.dart'; // Ensure this import exists
+import 'package:url_launcher/url_launcher.dart';
+import 'package:carousel_slider/carousel_slider.dart'; // NEW: You might need to add carousel_slider to pubspec.yaml
 import '../config/theme.dart';
 
 // --- DATA MODELS ---
@@ -53,6 +54,7 @@ class OfferSection extends StatefulWidget {
 
 class _OfferSectionState extends State<OfferSection> {
   int _expandedIndex = -1;
+  int _currentPhilosophyIndex = 0; // Track carousel page
 
   // --- WEBSITE LAUNCHER ---
   Future<void> _launchWebsite() async {
@@ -61,6 +63,28 @@ class _OfferSectionState extends State<OfferSection> {
       debugPrint("Could not launch website");
     }
   }
+
+  // --- DATA FOR CAROUSEL ---
+  final List<Map<String, dynamic>> _philosophySlides = [
+    {
+      "title": "Food is NOT the Enemy",
+      "desc": "We don't believe in starvation. Enjoy your favorite home-cooked meals while healing your metabolism.",
+      "icon": Icons.restaurant_menu,
+      "color": Colors.orangeAccent,
+    },
+    {
+      "title": "Root Cause Resolution",
+      "desc": "Pills only manage symptoms. We fix the hormonal imbalance (Insulin, Cortisol, Thyroid) that causes the disease.",
+      "icon": FontAwesomeIcons.tree,
+      "color": Colors.greenAccent,
+    },
+    {
+      "title": "Sustainable Lifestyle",
+      "desc": "No crash diets. We build habits that stick for a lifetime, so the weight never comes back.",
+      "icon": FontAwesomeIcons.infinity,
+      "color": Colors.blueAccent,
+    },
+  ];
 
   static List<PackageData> packages = [
     PackageData(
@@ -188,9 +212,38 @@ class _OfferSectionState extends State<OfferSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- 1. EXPERTISE GRID ---
+
+        // --- 1. NEW PHILOSOPHY CAROUSEL ---
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          child: Text("WHY CHOOSE US?", style: GoogleFonts.lato(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
+        ),
+        _buildPhilosophyCarousel(),
+        const SizedBox(height: 10),
+        // Dots Indicator
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: _philosophySlides.asMap().entries.map((entry) {
+            return Container(
+              width: 6.0,
+              height: 6.0,
+              margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black)
+                    .withOpacity(_currentPhilosophyIndex == entry.key ? 0.9 : 0.2),
+              ),
+            );
+          }).toList(),
+        ),
+
+        const SizedBox(height: 20),
+
+        // --- 2. EXPERTISE GRID ---
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -199,23 +252,13 @@ class _OfferSectionState extends State<OfferSection> {
               Text("What We Treat", style: GoogleFonts.playfairDisplay(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
               _buildExpertiseGrid(),
-              const SizedBox(height: 25),
-              // Unified Cure Message
-              Container(
-                padding: const EdgeInsets.only(left: 15),
-                decoration: const BoxDecoration(
-                    border: Border(left: BorderSide(color: AppColors.accentGold, width: 3))
-                ),
-                child: Text(
-                  "\"Whether it's Psoriasis, Diabetes, or Post-Pregnancy weight, the root cause is often Metabolic Dysfunction. We fix the root, and your body heals itself.\"",
-                  style: GoogleFonts.lato(color: Colors.white70, fontStyle: FontStyle.italic, height: 1.4, fontSize: 13),
-                ),
-              ),
             ],
           ),
         ),
 
-        // --- 2. PACKAGES HEADER ---
+        const SizedBox(height: 25),
+
+        // --- 3. PACKAGES HEADER ---
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -235,7 +278,7 @@ class _OfferSectionState extends State<OfferSection> {
         ),
         const SizedBox(height: 15),
 
-        // --- 3. HORIZONTAL LIST ---
+        // --- 4. HORIZONTAL LIST ---
         AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -272,7 +315,7 @@ class _OfferSectionState extends State<OfferSection> {
 
         const SizedBox(height: 30),
 
-        // --- 4. TRUST & WEBSITE SECTION (NEW) ---
+        // --- 5. TRUST & WEBSITE SECTION ---
         _buildTrustSection(),
 
         const SizedBox(height: 20),
@@ -280,8 +323,86 @@ class _OfferSectionState extends State<OfferSection> {
     );
   }
 
+  // --- WIDGET: PHILOSOPHY CAROUSEL ---
+  Widget _buildPhilosophyCarousel() {
+    return CarouselSlider(
+      options: CarouselOptions(
+        height: 140.0,
+        autoPlay: true,
+        autoPlayInterval: const Duration(seconds: 4),
+        viewportFraction: 0.9,
+        enlargeCenterPage: true,
+        onPageChanged: (index, reason) {
+          setState(() {
+            _currentPhilosophyIndex = index;
+          });
+        },
+      ),
+      items: _philosophySlides.map((slide) {
+        return Builder(
+          builder: (BuildContext context) {
+            return Container(
+              width: MediaQuery.of(context).size.width,
+              margin: const EdgeInsets.symmetric(horizontal: 5.0),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.white.withOpacity(0.08), Colors.white.withOpacity(0.02)],
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: slide['color'].withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(slide['icon'], color: slide['color'], size: 28),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          slide['title'],
+                          style: GoogleFonts.oswald(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          slide['desc'],
+                          style: GoogleFonts.lato(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              height: 1.3
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      }).toList(),
+    );
+  }
+
   // --- NEW TRUST FOOTER WIDGET ---
-  // --- NEW TRUST FOOTER WIDGET (FIXED OVERFLOW) ---
   Widget _buildTrustSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -293,11 +414,9 @@ class _OfferSectionState extends State<OfferSection> {
       ),
       child: Column(
         children: [
-          // INCLUSIONS & PROMISE ROW
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left: Common Inclusions
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +425,6 @@ class _OfferSectionState extends State<OfferSection> {
                       children: [
                         const Icon(Icons.check_box_outlined, color: AppColors.accentGold, size: 16),
                         const SizedBox(width: 8),
-                        // Added Flexible to prevent header overflow
                         Flexible(
                           child: Text(
                             "STANDARD INCLUSIONS",
@@ -324,9 +442,7 @@ class _OfferSectionState extends State<OfferSection> {
                   ],
                 ),
               ),
-              const SizedBox(width: 15), // Reduced gap slightly for safety
-
-              // Right: Our Promise
+              const SizedBox(width: 15),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -354,19 +470,16 @@ class _OfferSectionState extends State<OfferSection> {
               ),
             ],
           ),
-
           const SizedBox(height: 25),
           const Divider(color: Colors.white10),
           const SizedBox(height: 20),
-
-          // WEBSITE LINK (FIXED: Changed Row to Wrap)
           InkWell(
             onTap: _launchWebsite,
             child: Wrap(
               alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 5, // Horizontal gap
-              runSpacing: 5, // Vertical gap if it wraps
+              spacing: 5,
+              runSpacing: 5,
               children: [
                 const Icon(Icons.language, color: Colors.white54, size: 18),
                 Text("Visit Official Website:", style: GoogleFonts.lato(color: Colors.white70, fontSize: 14)),

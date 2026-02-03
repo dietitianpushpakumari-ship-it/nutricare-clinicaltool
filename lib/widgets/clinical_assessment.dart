@@ -7,7 +7,6 @@ import 'package:promotional_app/model/assesment_model.dart';
 import 'package:promotional_app/service/clinical_report_generator.dart';
 import '../config/theme.dart';
 import '../service/assessment_engine.dart';
-// Import the new PDF Generator
 
 class ClinicalAssessmentWidget extends StatefulWidget {
   final String contactNo;
@@ -49,18 +48,15 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
 
   // --- TRANSLATION HELPER ---
   String _t(String key) {
-    // 1. Check UI Labels
     if (AppTranslations.uiLabels[widget.lang]?.containsKey(key) ?? false) {
       return AppTranslations.uiLabels[widget.lang]![key]!;
     }
-    // 2. Check Question Dictionary
     if (AppTranslations.questions.containsKey(key)) {
       var qData = AppTranslations.questions[key];
       if (qData != null && qData.containsKey(widget.lang)) {
         return qData[widget.lang]['q'];
       }
     }
-    // 3. Fallback
     return key;
   }
 
@@ -80,7 +76,7 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
     setState(() {
       _answers[questionId] = value;
 
-      // Calculate Risk in Real-time (Simple Logic: Yes/True = Bad for red flag questions)
+      // Calculate Risk in Real-time
       if (isRedFlag) {
         if (value == true || value == "Yes") {
           _redFlagsCount++;
@@ -102,36 +98,20 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
     String riskLevel = _redFlagsCount > 3 ? "CRITICAL" : (_redFlagsCount > 1 ? "MODERATE" : "LOW");
 
     try {
-      // SAVE TO 'lead_health_assessments'
       await FirebaseFirestore.instance.collection('lead_health_assessments').add({
-        // 1. STANDARD ID FIELDS
-        'tenantid': tenant_id,      // Exact match for Admin Panel
-        'contact': widget.contactNo,       // Explicit contact number
-
-        // 2. USER DETAILS
+        'tenant_id': tenant_id,
+        'contact': widget.contactNo,
         'user_name': widget.userName,
-        'created_at': FieldValue.serverTimestamp(), // Standard timestamp
-
-        // 3. CLINICAL DATA
+        'created_at': FieldValue.serverTimestamp(),
         'audit_type': _selectedPath!.title,
         'risk_level': riskLevel,
         'red_flags_count': _redFlagsCount,
         'answers': _answers,
-
-        // 4. LEAD STATUS
-        'status': 'NEW', // Easy to filter in Admin
+        'status': 'NEW',
         'source': 'app_clinical_hub',
       });
-
-      debugPrint("Lead saved successfully to lead_health_assessments");
-
     } catch (e) {
       debugPrint("Error saving assessment: $e");
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error saving data: $e"), backgroundColor: Colors.red)
-        );
-      }
     }
   }
 
@@ -192,7 +172,7 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
 
               // DYNAMIC BODY
               if (_isCompleted)
-                _buildCompletionScreen()
+                _buildInlineReport() // <--- NEW REPORT UI
               else if (_selectedPath == null)
                 _buildPathSelector()
               else
@@ -204,10 +184,9 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
     );
   }
 
-  // --- 1. PATH SELECTOR (If accessed directly) ---
+  // --- 1. PATH SELECTOR ---
   Widget _buildPathSelector() {
     List<HealthPath> available = AssessmentEngine.getAvailablePaths(30, 'Female');
-
     return SizedBox(
       height: 130,
       child: ListView.builder(
@@ -221,21 +200,13 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
               width: 140,
               margin: const EdgeInsets.only(right: 15),
               padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.white10),
-              ),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.white10)),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(path.icon, color: Colors.white70, size: 30),
                   const SizedBox(height: 10),
-                  Text(
-                      path.title,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.lato(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
-                  ),
+                  Text(path.title, textAlign: TextAlign.center, style: GoogleFonts.lato(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -247,35 +218,23 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
 
   // --- 2. QUESTION CARD ---
   Widget _buildQuestionCard(ScreeningQuestion q) {
-    // Translation Logic
     String displayText = widget.lang == 'en' ? q.text : _t(q.id);
-    if (displayText == q.id) displayText = q.text; // Safety Fallback
+    if (displayText == q.id) displayText = q.text;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Question Text
-        Text(
-          displayText,
-          style: GoogleFonts.lato(color: Colors.white, fontSize: 18, height: 1.3),
-        ),
+        Text(displayText, style: GoogleFonts.lato(color: Colors.white, fontSize: 18, height: 1.3)),
         const SizedBox(height: 25),
-
-        // Input Type Logic
         if (q.type == QuestionType.yesNo) ...[
           _buildOptionButton("Yes", true, q),
           const SizedBox(height: 10),
           _buildOptionButton("No", false, q),
+        ] else if (q.type == QuestionType.singleChoice) ...[
+          ...?q.options?.map((opt) => Padding(padding: const EdgeInsets.only(bottom: 10), child: _buildOptionButton(opt, opt, q))),
+        ] else if (q.type == QuestionType.slider) ...[
+          _buildSlider(q),
         ]
-        else if (q.type == QuestionType.singleChoice) ...[
-          ...?q.options?.map((opt) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildOptionButton(opt, opt, q),
-          )),
-        ]
-        else if (q.type == QuestionType.slider) ...[
-            _buildSlider(q),
-          ]
       ],
     );
   }
@@ -286,18 +245,8 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white24),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: GoogleFonts.lato(color: Colors.white70, fontSize: 16)),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white12, size: 14)
-          ],
-        ),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white24)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: GoogleFonts.lato(color: Colors.white70, fontSize: 16)), const Icon(Icons.arrow_forward_ios, color: Colors.white12, size: 14)]),
       ),
     );
   }
@@ -306,118 +255,142 @@ class _ClinicalAssessmentWidgetState extends State<ClinicalAssessmentWidget> {
     double min = q.min ?? 0;
     double max = q.max ?? 100;
     double current = _answers[q.id] ?? min;
-
-    return Column(
-      children: [
-        Text(
-            "${current.round()} ${q.unit ?? ''}",
-            style: GoogleFonts.oswald(color: AppColors.accentGold, fontSize: 40)
-        ),
-        const SizedBox(height: 10),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: AppColors.accentGold,
-            thumbColor: Colors.white,
-            overlayColor: AppColors.accentGold.withOpacity(0.2),
-          ),
-          child: Slider(
-            value: current,
-            min: min,
-            max: max,
-            onChanged: (val) {
-              setState(() => _answers[q.id] = val);
-            },
-          ),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: () => _submitAnswer(q.id, current, q.isRedFlag),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGold,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))
-          ),
-          child: const Text("NEXT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        )
-      ],
-    );
+    return Column(children: [
+      Text("${current.round()} ${q.unit ?? ''}", style: GoogleFonts.oswald(color: AppColors.accentGold, fontSize: 40)),
+      const SizedBox(height: 10),
+      SliderTheme(data: SliderTheme.of(context).copyWith(activeTrackColor: AppColors.accentGold, thumbColor: Colors.white, overlayColor: AppColors.accentGold.withOpacity(0.2)), child: Slider(value: current, min: min, max: max, onChanged: (val) => setState(() => _answers[q.id] = val))),
+      const SizedBox(height: 20),
+      ElevatedButton(onPressed: () => _submitAnswer(q.id, current, q.isRedFlag), style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGold, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), child: const Text("NEXT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)))
+    ]);
   }
 
-  // --- 3. CRITICAL COMPLETION SCREEN (THE FEAR FACTOR) ---
-  Widget _buildCompletionScreen() {
+  // --- 3. INLINE REPORT SCREEN (NEW) ---
+  Widget _buildInlineReport() {
     Color statusColor = _redFlagsCount > 3 ? Colors.red : (_redFlagsCount > 1 ? Colors.orange : Colors.green);
     String statusText = _redFlagsCount > 3 ? "CRITICAL RISK" : (_redFlagsCount > 1 ? "MODERATE RISK" : "STABLE");
 
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Score Circle
-        Container(
-          width: 100,
-          height: 100,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: statusColor, width: 4),
-              color: statusColor.withOpacity(0.1)
-          ),
-          child: Text("$_redFlagsCount", style: GoogleFonts.oswald(fontSize: 45, color: statusColor, fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(height: 15),
-
-        Text(statusText, style: GoogleFonts.oswald(color: statusColor, fontSize: 28, letterSpacing: 1)),
-        const SizedBox(height: 10),
-
-        Text(
-          "We detected $_redFlagsCount major metabolic red flags in your profile.",
-          textAlign: TextAlign.center,
-          style: GoogleFonts.lato(color: Colors.white70, fontSize: 14),
-        ),
-
-        const SizedBox(height: 30),
-
-        // DOWNLOAD REPORT BUTTON
-        InkWell(
-          onTap: () {
-            // Trigger PDF Generation
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generating Clinical Report...")));
-            ClinicalReportGenerator.generate(widget.userName, _selectedPath!.title, _redFlagsCount, _answers);
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.redAccent.shade700, Colors.redAccent]),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 15, spreadRadius: 1)]
+        // 1. HEADER (Compact Score)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 50, height: 50,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: statusColor, width: 3), color: statusColor.withOpacity(0.1)),
+              child: Text("$_redFlagsCount", style: GoogleFonts.oswald(fontSize: 24, color: statusColor, fontWeight: FontWeight.bold)),
             ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(width: 15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.picture_as_pdf, color: Colors.white),
-                const SizedBox(width: 10),
-                Text("DOWNLOAD FULL REPORT", style: GoogleFonts.lato(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(statusText, style: GoogleFonts.oswald(color: statusColor, fontSize: 20, letterSpacing: 1)),
+                Text("Clinical Flags Detected", style: GoogleFonts.lato(color: Colors.white54, fontSize: 12)),
               ],
+            )
+          ],
+        ),
+
+        const SizedBox(height: 20),
+        const Divider(color: Colors.white10),
+
+        // 2. DETAILED FINDINGS LIST
+        Container(
+          constraints: const BoxConstraints(maxHeight: 300), // Limit height to allow scrolling
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _activeQuestions.map((q) {
+                final answer = _answers[q.id];
+                if (answer == null) return const SizedBox.shrink();
+
+                // Logic: Is this a bad answer?
+                // For Yes/No, 'true' is bad if q.isRedFlag is true
+                bool isRisk = q.isRedFlag && (answer == true || answer == "Yes");
+
+                // Format Answer Text
+                String ansText = answer.toString();
+                if(answer is bool) ansText = answer ? "YES" : "NO";
+                if(answer is double) ansText = "${answer.round()} ${q.unit ?? ''}";
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      color: isRisk ? Colors.red.withOpacity(0.1) : Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isRisk ? Colors.red.withOpacity(0.3) : Colors.white10)
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                          isRisk ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                          color: isRisk ? Colors.redAccent : Colors.greenAccent,
+                          size: 16
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          widget.lang == 'en' ? q.text : _t(q.id),
+                          style: GoogleFonts.lato(color: Colors.white70, fontSize: 12),
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                          ansText,
+                          style: GoogleFonts.lato(
+                              color: isRisk ? Colors.redAccent : Colors.white,
+                              fontWeight: FontWeight.bold, fontSize: 12
+                          )
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ),
 
-        const SizedBox(height: 15),
+        const SizedBox(height: 20),
 
-        TextButton(
-          onPressed: () {
-            // Reset to allow another test or close
-            if(widget.initialPath != null) {
-              Navigator.pop(context); // Close if in fullscreen mode
-            } else {
-              setState(() {
-                _selectedPath = null;
-                _isCompleted = false;
-              });
-            }
-          },
-          child: Text(widget.initialPath != null ? "Close" : "Start New Audit", style: const TextStyle(color: Colors.white30)),
+        // 3. ACTIONS (Download / Close)
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Downloading Report...")));
+                  ClinicalReportGenerator.generate(widget.userName, _selectedPath!.title, _redFlagsCount, _answers);
+                },
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentGold,
+                    side: const BorderSide(color: AppColors.accentGold),
+                    padding: const EdgeInsets.symmetric(vertical: 12)
+                ),
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text("SAVE PDF"),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  if(widget.initialPath != null) {
+                    Navigator.pop(context);
+                  } else {
+                    setState(() { _selectedPath = null; _isCompleted = false; });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12)
+                ),
+                child: const Text("CLOSE"),
+              ),
+            ),
+          ],
         )
       ],
     );

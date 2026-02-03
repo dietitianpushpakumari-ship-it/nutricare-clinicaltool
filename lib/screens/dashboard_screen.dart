@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:promotional_app/config/constant.dart';
+import 'package:promotional_app/screens/family_report_screen.dart';
 import 'package:promotional_app/screens/knowledge_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -178,7 +179,31 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
                   const SizedBox(height: 20),
                   SizedBox(height: 300, child: GlassSwipeDeck(lang: _lang)),
                   const SizedBox(height: 25),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("CLINICAL TOOLS", style: GoogleFonts.lato(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)), const SizedBox(height: 10), _buildGridMenu(), const SizedBox(height: 15), Center(child: TextButton.icon(onPressed: () async { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generating Family Report..."))); await ReportGenerator.generateFamilyReport(widget.contactNo, widget.userName); }, icon: const Icon(Icons.download, size: 14, color: Colors.white30), label: Text("Download Family Audit Report", style: GoogleFonts.lato(color: Colors.white30, fontSize: 12))))])),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child:
+                      Column(crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("CLINICAL TOOLS", style: GoogleFonts.lato(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)), const SizedBox(height: 10),
+                            _buildGridMenu(),
+                            const SizedBox(height: 15),
+                            // REPLACE the existing TextButton.icon logic with this:
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FamilyReportScreen(
+                                        contactNo: widget.contactNo,
+                                        userName: widget.userName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.analytics, size: 14, color: Colors.white30), // Changed icon to Analytics
+                                label: Text("View Family Health Report", style: GoogleFonts.lato(color: Colors.white30, fontSize: 12)), // Changed Text
+                              ),
+                            ),   ])),
                   OfferSection(onBook: _handleBooking),
 
                   // --- NEW: CONTACT SECTION ---
@@ -239,7 +264,7 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
           const SizedBox(height: 15),
 
           // --- ENQUIRY FORM (Specific Queries) ---
-          Text("Or send a message to Dr. Pushpa:", style: GoogleFonts.lato(color: AppColors.accentGold, fontSize: 12, fontWeight: FontWeight.bold)),
+          Text("Or send a message to Dt. Pushpa:", style: GoogleFonts.lato(color: AppColors.accentGold, fontSize: 12, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(10)),
