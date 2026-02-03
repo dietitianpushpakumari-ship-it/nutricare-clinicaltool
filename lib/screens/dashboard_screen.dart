@@ -5,12 +5,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:promotional_app/config/constant.dart';
-import 'package:promotional_app/screens/family_report_screen.dart';
 import 'package:promotional_app/screens/knowledge_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // Ensure this is imported
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 // --- WIDGETS & SERVICES ---
 import 'package:promotional_app/screens/assessment_hub_screen.dart';
@@ -19,6 +18,8 @@ import 'package:promotional_app/widgets/offer_section.dart';
 import 'package:promotional_app/log_sheet.dart';
 import 'package:promotional_app/config/health_content.dart';
 import 'package:promotional_app/screens/gate_screen.dart';
+import 'package:promotional_app/screens/family_report_screen.dart';
+import 'package:promotional_app/screens/welcome_screen.dart'; // [FIX] Imported Welcome Screen
 import '../config/theme.dart';
 
 class PremiumDashboard extends StatefulWidget {
@@ -35,74 +36,86 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
   final List<String> _profiles = ["Dad", "Mom", "Me", "Spouse", "Kid"];
   String _lang = 'en';
 
-  // Controller for Enquiry Message
   final TextEditingController _enquiryCtrl = TextEditingController();
 
-  // --- LOGIC SECTION ---
-  Future<void> _launchURL(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not launch link")));
+  @override
+  void initState() {
+    super.initState();
+    // Check for onboarding after the widget initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkFirstTimeUser());
+  }
+
+  // --- [FIXED] ONBOARDING LOGIC ---
+  Future<void> _checkFirstTimeUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool hasSeenWelcome = prefs.getBool('has_seen_welcome_v1') ?? false;
+
+    if (!hasSeenWelcome) {
+      if (mounted) {
+        // Navigate to the separate Welcome Screen
+        final bool? result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+        );
+
+        // If user completed the flow (Accepted Consent)
+        if (result == true) {
+          await prefs.setBool('has_seen_welcome_v1', true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Setup Complete! Start logging vitals."), backgroundColor: Colors.green)
+            );
+          }
+        }
+      }
     }
   }
 
-  // --- HELPER: GENERATE ID ---
-  String _generateBookingId() {
-    int timestamp = DateTime.now().millisecondsSinceEpoch;
-    String unique = timestamp.toString().substring(7);
-    return "NW-$unique";
-  }
-
-  // --- LOGIC: Submit General Enquiry ---
-  Future<void> _submitEnquiry() async {
-    if (_enquiryCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please type a message first."), backgroundColor: Colors.red));
-      return;
-    }
+  // --- LOGIC: Request Callback ---
+  Future<void> _requestCallback() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Registering callback request..."),
+          backgroundColor: AppColors.primaryDark,
+          duration: Duration(milliseconds: 1000),
+        )
+    );
 
     try {
       String refId = _generateBookingId();
-      String message = _enquiryCtrl.text.trim();
 
       await FirebaseFirestore.instance.collection('lead_bookings').add({
         'tenant_id': tenant_id,
         'booking_reference_id': refId,
         'user_name': widget.userName,
         'phone_number': widget.contactNo,
-
-        // Standard Context
         'booking_type': 'GENERAL_INQUIRY',
-        'interest_label': 'General Query',
-        'plan_selection': 'General Query',
-
-        // The Message
-        'user_message': message,
-        'notes': "User initiated contact from Dashboard.",
-
-        // Status & Meta
+        'interest_label': 'Callback Request',
+        'plan_selection': 'Callback Request',
+        'user_message': "User tapped 'Request Callback'.",
+        'notes': "Incoming callback request from App Dashboard.",
         'source': 'APP',
         'status': 'NEW_LEAD',
         'payment_status': 'N/A',
         'created_at': FieldValue.serverTimestamp(),
-        'last_active': FieldValue.serverTimestamp(), // Triggers Live Pulse
+        'last_active': FieldValue.serverTimestamp(),
       });
 
-      _enquiryCtrl.clear();
       if (mounted) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: AppColors.accentGold)),
-              title: const Icon(Icons.check_circle, color: AppColors.accentGold),
+              title: const Icon(Icons.support_agent, color: AppColors.accentGold, size: 40),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text("Message Sent!", style: GoogleFonts.oswald(color: Colors.white, fontSize: 20)),
+                  Text("Request Received", style: GoogleFonts.oswald(color: Colors.white, fontSize: 20)),
                   const SizedBox(height: 5),
                   Text("Ref ID: $refId", style: GoogleFonts.manrope(color: Colors.white38, fontSize: 10)),
-                  const SizedBox(height: 10),
-                  Text("We will reply to you shortly.", style: GoogleFonts.lato(color: Colors.white70, fontSize: 12)),
+                  const SizedBox(height: 15),
+                  Text("Our team has been notified.\nWe will call you shortly.", textAlign: TextAlign.center, style: GoogleFonts.lato(color: Colors.white70, fontSize: 14)),
                 ],
               ),
               actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: AppColors.accentGold)))]
@@ -114,14 +127,46 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
     }
   }
 
-  // --- LOGIC: Handle Booking (Standardized) ---
+  Future<void> _launchURL(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not launch link")));
+    }
+  }
+
+  String _generateBookingId() {
+    int timestamp = DateTime.now().millisecondsSinceEpoch;
+    String unique = timestamp.toString().substring(7);
+    return "NW-$unique";
+  }
+
+  Future<void> _submitEnquiry() async {
+    if (_enquiryCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please type a message first."), backgroundColor: Colors.red));
+      return;
+    }
+    try {
+      String refId = _generateBookingId();
+      await FirebaseFirestore.instance.collection('lead_bookings').add({
+        'tenant_id': tenant_id, 'booking_reference_id': refId, 'user_name': widget.userName, 'phone_number': widget.contactNo,
+        'booking_type': 'GENERAL_INQUIRY', 'interest_label': 'General Query', 'plan_selection': 'General Query',
+        'user_message': _enquiryCtrl.text.trim(), 'notes': "User initiated contact from Dashboard.",
+        'source': 'APP', 'status': 'NEW_LEAD', 'payment_status': 'N/A',
+        'created_at': FieldValue.serverTimestamp(), 'last_active': FieldValue.serverTimestamp(),
+      });
+      _enquiryCtrl.clear();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Message Sent! We will reply shortly."), backgroundColor: Colors.green));
+    } catch (e) { debugPrint("Error: $e"); }
+  }
+
   Future<void> _handleBooking(String planName, String price) async {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Processing request..."), backgroundColor: AppColors.primaryDark, duration: Duration(milliseconds: 1000)));
     try {
       String refId = _generateBookingId();
       await FirebaseFirestore.instance.collection('lead_bookings').add({
-        'tenant_id': tenant_id, 'booking_reference_id': refId, 'user_name': widget.userName, 'phone_number': widget.contactNo, 'user_message': "Booking request for Profile: $_selectedProfile",
-        'booking_type': 'PATIENT_INQUIRY', 'interest_label': planName, 'plan_selection': planName, 'price_quoted': price, 'source': 'APP', 'status': 'NEW_LEAD', 'payment_status': 'N/A',
+        'tenant_id': tenant_id, 'booking_reference_id': refId, 'user_name': widget.userName, 'phone_number': widget.contactNo,
+        'booking_type': 'PATIENT_INQUIRY', 'interest_label': planName, 'plan_selection': planName, 'price_quoted': price,
+        'user_message': "Booking request for Profile: $_selectedProfile", 'source': 'APP', 'status': 'NEW_LEAD', 'payment_status': 'N/A',
         'created_at': FieldValue.serverTimestamp(), 'last_active': FieldValue.serverTimestamp(),
       });
       if (mounted) {
@@ -134,10 +179,12 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
     try {
       String refId = _generateBookingId();
       await FirebaseFirestore.instance.collection('lead_bookings').add({
-        'tenant_id': tenant_id, 'booking_reference_id': refId, 'user_name': widget.userName, 'phone_number': widget.contactNo, 'booking_type': 'PATIENT_INQUIRY', 'interest_label': 'Clinical Consultation (Risk Alert)', 'plan_selection': 'Clinical Consultation',
-        'user_message': "Profile: $_selectedProfile. Health Score: $score/100.", 'notes': "Auto-generated Risk Alert. Symptoms: ${symptoms.join(', ')}", 'source': 'APP', 'status': 'NEW_LEAD', 'created_at': FieldValue.serverTimestamp(), 'last_active': FieldValue.serverTimestamp(),
+        'tenant_id': tenant_id, 'booking_reference_id': refId, 'user_name': widget.userName, 'phone_number': widget.contactNo,
+        'booking_type': 'PATIENT_INQUIRY', 'interest_label': 'Clinical Consultation (Risk Alert)', 'plan_selection': 'Clinical Consultation',
+        'user_message': "Profile: $_selectedProfile. Health Score: $score/100.", 'notes': "Auto-generated Risk Alert. Symptoms: ${symptoms.join(', ')}",
+        'source': 'APP', 'status': 'NEW_LEAD', 'created_at': FieldValue.serverTimestamp(), 'last_active': FieldValue.serverTimestamp(),
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Clinical Request Sent."), backgroundColor: AppColors.accentGold));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Clinical Request Sent. Doctor will call shortly."), backgroundColor: AppColors.accentGold));
     } catch (e) { debugPrint(e.toString()); }
   }
 
@@ -179,37 +226,22 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
                   const SizedBox(height: 20),
                   SizedBox(height: 300, child: GlassSwipeDeck(lang: _lang)),
                   const SizedBox(height: 25),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child:
-                      Column(crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("CLINICAL TOOLS", style: GoogleFonts.lato(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)), const SizedBox(height: 10),
-                            _buildGridMenu(),
-                            const SizedBox(height: 15),
-                            // REPLACE the existing TextButton.icon logic with this:
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => FamilyReportScreen(
-                                        contactNo: widget.contactNo,
-                                        userName: widget.userName,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.analytics, size: 14, color: Colors.white30), // Changed icon to Analytics
-                                label: Text("View Family Health Report", style: GoogleFonts.lato(color: Colors.white30, fontSize: 12)), // Changed Text
-                              ),
-                            ),   ])),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text("CLINICAL TOOLS", style: GoogleFonts.lato(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    _buildGridMenu(),
+                    const SizedBox(height: 15),
+                    Center(child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => FamilyReportScreen(contactNo: widget.contactNo, userName: widget.userName)));
+                      },
+                      icon: const Icon(Icons.analytics, size: 14, color: Colors.white30),
+                      label: Text("View Family Health Report", style: GoogleFonts.lato(color: Colors.white30, fontSize: 12)),
+                    ))
+                  ])),
                   OfferSection(onBook: _handleBooking),
-
-                  // --- NEW: CONTACT SECTION ---
                   const SizedBox(height: 25),
                   _buildContactSection(),
-
                   const SizedBox(height: 40),
                 ],
               ),
@@ -220,8 +252,7 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
     );
   }
 
-// --- CONTACT SECTION WIDGET ---
-  // --- CONTACT SECTION WIDGET (Strict Lead Generation Mode) ---
+  // --- CONTACT SECTION WIDGET ---
   Widget _buildContactSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -247,7 +278,7 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton.icon(
-              onPressed: _requestCallback, // Calls the function we wrote earlier
+              onPressed: _requestCallback,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentGold, // Gold Background
                 foregroundColor: Colors.black, // Black Text
@@ -287,71 +318,6 @@ class _PremiumDashboardState extends State<PremiumDashboard> {
         ],
       ),
     );
-  }
-
-  // --- LOGIC: Request Callback (No Dialing) ---
-  Future<void> _requestCallback() async {
-    // 1. Instant Feedback
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Registering callback request..."),
-          backgroundColor: AppColors.primaryDark,
-          duration: Duration(milliseconds: 1000),
-        )
-    );
-
-    try {
-      String refId = _generateBookingId();
-
-      // 2. Save to CRM (Standard Model)
-      await FirebaseFirestore.instance.collection('lead_bookings').add({
-        'tenant_id': tenant_id,
-        'booking_reference_id': refId,
-        'user_name': widget.userName,
-        'phone_number': widget.contactNo,
-
-        // Context
-        'booking_type': 'GENERAL_INQUIRY', // Standard Type
-        'interest_label': 'Callback Request', // Shows clearly on Dashboard
-        'plan_selection': 'Callback Request', // Legacy support
-
-        // Message
-        'user_message': "User tapped 'Call Us' - Wants a callback.",
-        'notes': "Incoming callback request from App Dashboard.",
-
-        // Status & Meta
-        'source': 'APP',
-        'status': 'NEW_LEAD',
-        'payment_status': 'N/A',
-        'created_at': FieldValue.serverTimestamp(),
-        'last_active': FieldValue.serverTimestamp(), // Triggers Green Light in CRM
-      });
-
-      // 3. Success Dialog
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: AppColors.accentGold)),
-              title: const Icon(Icons.support_agent, color: AppColors.accentGold, size: 40),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text("Request Received", style: GoogleFonts.oswald(color: Colors.white, fontSize: 20)),
-                  const SizedBox(height: 5),
-                  Text("Ref ID: $refId", style: GoogleFonts.manrope(color: Colors.white38, fontSize: 10)),
-                  const SizedBox(height: 15),
-                  Text("Our team has been notified.\nWe will call you shortly.", textAlign: TextAlign.center, style: GoogleFonts.lato(color: Colors.white70, fontSize: 14)),
-                ],
-              ),
-              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: AppColors.accentGold)))]
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error: $e");
-    }
   }
 
   // --- REUSED WIDGETS ---
