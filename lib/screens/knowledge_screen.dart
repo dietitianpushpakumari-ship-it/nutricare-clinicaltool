@@ -1,11 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // NEW: For Database
-import 'package:shared_preferences/shared_preferences.dart'; // NEW: For User Details
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/theme.dart';
-import '../config/constant.dart'; // Ensure 'tenant_id' is here
+import '../config/constant.dart'; // Ensure tenant_id is here
 import '../config/knowledge_content.dart';
 
 class KnowledgeScreen extends StatefulWidget {
@@ -23,6 +23,13 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+  }
+
+  // --- HELPER: GENERATE ID ---
+  String _generateBookingId() {
+    int timestamp = DateTime.now().millisecondsSinceEpoch;
+    String unique = timestamp.toString().substring(7);
+    return "NW-$unique";
   }
 
   String _getText(Map<String, String> map) {
@@ -79,9 +86,6 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> with SingleTickerProv
       ),
     );
   }
-
-  // ... (Keep _buildHeader, _langBtn, _buildList, _buildSectionHeader, _buildContentBox EXACTLY as they were) ...
-  // I am hiding them here to save space, but DO NOT DELETE THEM from your file.
 
   Widget _buildHeader() {
     return Padding(
@@ -177,55 +181,79 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> with SingleTickerProv
               ),
             ),
 
-            // --- UPDATED ACTION BUTTON ---
+            // --- STANDARD ACTION BUTTON ---
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
                 onPressed: () async {
-                  // 1. Close the sheet first
+                  // 1. Close Sheet
                   Navigator.pop(context);
 
-                  // 2. Show "Sending" feedback
+                  // 2. Feedback
                   ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Sending request to Clinic..."), duration: Duration(milliseconds: 1500))
+                      const SnackBar(content: Text("Processing Request..."), backgroundColor: AppColors.primaryDark, duration: Duration(milliseconds: 1000))
                   );
 
                   try {
-                    // 3. Get User Details
+                    // 3. Get User Info
                     final prefs = await SharedPreferences.getInstance();
                     String phone = prefs.getString('promo_phone') ?? "Guest";
                     String name = prefs.getString('promo_name') ?? "Unknown";
-                    String currentTopic = item.title['en'] ?? "General";
+                    String currentTopic = item.title['en'] ?? "General Knowledge";
 
-                    // 4. Save to Firestore
+                    // 4. Generate ID
+                    String refId = _generateBookingId();
+
+                    // 5. Save to Firestore (STANDARD MODEL)
                     await FirebaseFirestore.instance.collection('lead_bookings').add({
                       'tenant_id': tenant_id,
-                      'contact': phone,
+                      'booking_reference_id': refId, // Standard ID
+
                       'user_name': name,
-                      'booking_type': 'Knowledge Consultation', // Distinct from Risk Assessment
-                      'interest_topic': currentTopic, // Crucial: Tells Dr. Pushpa what they care about
+                      'phone_number': phone,
+
+                      // Context
+                      'booking_type': 'PATIENT_INQUIRY', // Standard Type
+                      'interest_label': "Knowledge: $currentTopic", // Standard Label
+                      'plan_selection': "Knowledge: $currentTopic", // Legacy
+
+                      // Notes & Messages
+                      'user_message': "I read the article on '$currentTopic' and want help.",
+                      'notes': "Lead generated from Knowledge Hub. Topic: $currentTopic",
+
+                      // Status & Meta
+                      'source': 'APP', // Shows App Icon
+                      'status': 'NEW_LEAD',
+                      'payment_status': 'N/A',
                       'created_at': FieldValue.serverTimestamp(),
-                      'status': 'pending',
-                      'notes': 'User requested consult after reading about $currentTopic',
+                      'last_active': FieldValue.serverTimestamp(), // Triggers Live Pulse
                     });
 
-                    // 5. Success Feedback
+                    // 6. Success
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Request Sent! We will contact you shortly."),
-                            backgroundColor: Colors.green,
-                          )
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF1A1A1A),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: AppColors.accentGold)),
+                            title: const Icon(Icons.check_circle, color: AppColors.accentGold, size: 40),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text("Request Sent", style: GoogleFonts.oswald(color: Colors.white, fontSize: 22)),
+                                Text("Ref ID: $refId", style: GoogleFonts.lato(color: Colors.white38, fontSize: 12)),
+                                const SizedBox(height: 10),
+                                Text("Our expert will call you about:\n$currentTopic", textAlign: TextAlign.center, style: GoogleFonts.lato(color: Colors.white70)),
+                              ],
+                            ),
+                            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CLOSE", style: TextStyle(color: AppColors.accentGold)))]
+                        ),
                       );
                     }
 
                   } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red)
-                      );
-                    }
+                    debugPrint("Error: $e");
                   }
                 },
                 style: ElevatedButton.styleFrom(
